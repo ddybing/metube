@@ -127,7 +127,6 @@ class Download:
         self.loop = asyncio.get_running_loop()
         self.notifier = notifier
         self.info.status = 'preparing'
-        print(f'ytdl_opts is in start: {self.ytdl_opts}')
         await self.notifier.updated(self.info)
         asyncio.create_task(self.update_status())
         return await self.loop.run_in_executor(None, self.proc.join)
