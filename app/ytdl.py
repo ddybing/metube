@@ -65,15 +65,10 @@ class Download:
         self.notifier = None
         self.add_subtitles = add_subtitles
 
-        print(f'addsubtitles is: {add_subtitles}')
-        
-        self.ytdl_opts['writesubtitles'] = 'true'
-
         if self.add_subtitles:
             self.ytdl_opts['writesubtitles'] = True
             self.ytdl_opts['allsubtitles'] = True
             self.ytdl_opts['subtitleslangs'] = ['all']
-                # Add FFmpeg postprocessor to embed subtitles
             if "postprocessors" not in self.ytdl_opts:
                 self.ytdl_opts["postprocessors"] = []
             
@@ -82,7 +77,6 @@ class Download:
                     "key": "FFmpegEmbedSubtitle"
                 }
             )
-        print(f'ytdl_opts is: {self.ytdl_opts}')
 
 
     def _download(self):
