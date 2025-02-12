@@ -31,7 +31,7 @@ class DownloadQueueNotifier:
         raise NotImplementedError
 
 class DownloadInfo:
-    def __init__(self, id, title, url, quality, format, folder, custom_name_prefix, error):
+    def __init__(self, id, title, url, quality, format, folder, custom_name_prefix, error, add_subtitles):
         self.id = id if len(custom_name_prefix) == 0 else f'{custom_name_prefix}.{id}'
         self.title = title if len(custom_name_prefix) == 0 else f'{custom_name_prefix}.{title}'
         self.url = url
@@ -44,11 +44,12 @@ class DownloadInfo:
         self.size = None
         self.timestamp = time.time_ns()
         self.error = error
+        self.add_subtitles = add_subtitles  # Initialize add_subtitles with a default value
 
 class Download:
     manager = None
 
-    def __init__(self, download_dir, temp_dir, output_template, output_template_chapter, quality, format, ytdl_opts, info):
+    def __init__(self, download_dir, temp_dir, output_template, output_template_chapter, quality, format, ytdl_opts, info, add_subtitles):
         self.download_dir = download_dir
         self.temp_dir = temp_dir
         self.output_template = output_template
@@ -62,6 +63,26 @@ class Download:
         self.proc = None
         self.loop = None
         self.notifier = None
+        self.add_subtitles = add_subtitles
+
+        print(f'addsubtitles is: {add_subtitles}')
+        
+        self.ytdl_opts['writesubtitles'] = 'true'
+
+        if self.add_subtitles:
+            self.ytdl_opts['writesubtitles'] = True
+            self.ytdl_opts['allsubtitles'] = True
+            self.ytdl_opts['subtitleslangs'] = ['all']
+                # Add FFmpeg postprocessor to embed subtitles
+            if "postprocessors" not in self.ytdl_opts:
+                self.ytdl_opts["postprocessors"] = []
+            
+            self.ytdl_opts["postprocessors"].append(
+                {
+                    "key": "FFmpegEmbedSubtitle"
+                }
+            )
+        print(f'ytdl_opts is: {self.ytdl_opts}')
 
 
     def _download(self):
@@ -85,6 +106,7 @@ class Download:
                     else:
                         filename = d['info_dict']['filepath']
                     self.status_queue.put({'status': 'finished', 'filename': filename})
+                    
             ret = yt_dlp.YoutubeDL(params={
                 'quiet': True,
                 'no_color': True,
@@ -111,6 +133,7 @@ class Download:
         self.loop = asyncio.get_running_loop()
         self.notifier = notifier
         self.info.status = 'preparing'
+        print(f'ytdl_opts is in start: {self.ytdl_opts}')
         await self.notifier.updated(self.info)
         asyncio.create_task(self.update_status())
         return await self.loop.run_in_executor(None, self.proc.join)
@@ -256,7 +279,7 @@ class DownloadQueue:
             dldirectory = base_directory
         return dldirectory, None
 
-    async def __add_entry(self, entry, quality, format, folder, custom_name_prefix, playlist_strict_mode, playlist_item_limit, auto_start, already):
+    async def __add_entry(self, entry, quality, format, folder, custom_name_prefix, playlist_strict_mode, playlist_item_limit, auto_start, add_subtitles, already):
         if not entry:
             return {'status': 'error', 'msg': "Invalid/empty data was given."}
 
@@ -272,7 +295,7 @@ class DownloadQueue:
 
         if etype.startswith('url'):
             log.debug('Processing as an url')
-            return await self.add(entry['url'], quality, format, folder, custom_name_prefix, playlist_strict_mode, playlist_item_limit, auto_start, already)
+            return await self.add(entry['url'], quality, format, folder, custom_name_prefix, playlist_strict_mode, playlist_item_limit, auto_start, add_subtitles, already)
         elif etype == 'playlist':
             log.debug('Processing as a playlist')
             entries = entry['entries']
@@ -296,7 +319,7 @@ class DownloadQueue:
         elif etype == 'video' or etype.startswith('url') and 'id' in entry and 'title' in entry:
             log.debug('Processing as a video')
             if not self.queue.exists(entry['id']):
-                dl = DownloadInfo(entry['id'], entry.get('title') or entry['id'], entry.get('webpage_url') or entry['url'], quality, format, folder, custom_name_prefix, error)
+                dl = DownloadInfo(entry['id'], entry.get('title') or entry['id'], entry.get('webpage_url') or entry['url'], quality, format, folder, custom_name_prefix, error, add_subtitles)
                 dldirectory, error_message = self.__calc_download_path(quality, format, folder)
                 if error_message is not None:
                     return error_message
@@ -317,7 +340,7 @@ class DownloadQueue:
                     ytdl_options['playlistend'] = playlist_item_limit
 
                 if auto_start is True:
-                    self.queue.put(Download(dldirectory, self.config.TEMP_DIR, output, output_chapter, quality, format, ytdl_options, dl))
+                    self.queue.put(Download(dldirectory, self.config.TEMP_DIR, output, output_chapter, quality, format, ytdl_options, dl, add_subtitles))
                     self.event.set()
                 else:
                     self.pending.put(Download(dldirectory, self.config.TEMP_DIR, output, output_chapter, quality, format, ytdl_options, dl))
@@ -325,8 +348,8 @@ class DownloadQueue:
             return {'status': 'ok'}
         return {'status': 'error', 'msg': f'Unsupported resource "{etype}"'}
 
-    async def add(self, url, quality, format, folder, custom_name_prefix, playlist_strict_mode, playlist_item_limit, auto_start=True, already=None):
-        log.info(f'adding {url}: {quality=} {format=} {already=} {folder=} {custom_name_prefix=} {playlist_strict_mode=} {playlist_item_limit=}')
+    async def add(self, url, quality, format, folder, custom_name_prefix, playlist_strict_mode, playlist_item_limit, add_subtitles, auto_start=True, already=None):
+        log.info(f'adding {url}: {quality=} {format=} {already=} {folder=} {custom_name_prefix=} {playlist_strict_mode=} {playlist_item_limit=} {add_subtitles=}')
         already = set() if already is None else already
         if url in already:
             log.info('recursion detected, skipping')
@@ -337,7 +360,7 @@ class DownloadQueue:
             entry = await asyncio.get_running_loop().run_in_executor(None, self.__extract_info, url, playlist_strict_mode)
         except yt_dlp.utils.YoutubeDLError as exc:
             return {'status': 'error', 'msg': str(exc)}
-        return await self.__add_entry(entry, quality, format, folder, custom_name_prefix, playlist_strict_mode, playlist_item_limit, auto_start, already)
+        return await self.__add_entry(entry, quality, format, folder, custom_name_prefix, playlist_strict_mode, playlist_item_limit, add_subtitles, auto_start, already)
 
     async def start_pending(self, ids):
         for id in ids:

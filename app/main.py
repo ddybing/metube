@@ -131,11 +131,14 @@ async def add(request):
     playlist_strict_mode = post.get('playlist_strict_mode')
     playlist_item_limit = post.get('playlist_item_limit')
     auto_start = post.get('auto_start')
+    add_subtitles = post.get('add_subtitles')
 
     if custom_name_prefix is None:
         custom_name_prefix = ''
     if auto_start is None:
         auto_start = True
+    if add_subtitles is None:
+        add_subtitles = False
     if playlist_strict_mode is None:
         playlist_strict_mode = config.DEFAULT_OPTION_PLAYLIST_STRICT_MODE
     if playlist_item_limit is None:
@@ -143,7 +146,7 @@ async def add(request):
 
     playlist_item_limit = int(playlist_item_limit)
 
-    status = await dqueue.add(url, quality, format, folder, custom_name_prefix, playlist_strict_mode, playlist_item_limit, auto_start)
+    status = await dqueue.add(url, quality, format, folder, custom_name_prefix, playlist_strict_mode, playlist_item_limit, auto_start, add_subtitles)
     return web.Response(text=serializer.encode(status))
 
 @routes.post(config.URL_PREFIX + 'delete')

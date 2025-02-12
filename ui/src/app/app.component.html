@@ -76,6 +76,15 @@
           </div>
         </div>
         <div class="col-md-6 col-lg-3 add-url-component">
+          <div class="input-group">
+            <span class="input-group-text">Add subtitles</span>
+            <select class="form-select" name="addSubtitles" [(ngModel)]="addSubtitles" (change)="addSubtitlesChanged()" [disabled]="addInProgress || downloads.loading">
+              <option [ngValue]="true">Yes</option>
+              <option [ngValue]="false">No</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-3 add-url-component">
           <div [attr.class]="showAdvanced() ? 'btn-group add-url-group' : 'add-url-group'" ngbDropdown #advancedDropdown="ngbDropdown" display="dynamic" placement="bottom-end">
             <button class="btn btn-primary add-url" type="submit" (click)="addDownload()" [disabled]="addInProgress || downloads.loading">
               <span class="spinner-border spinner-border-sm" role="status" id="add-spinner" *ngIf="addInProgress"></span>
